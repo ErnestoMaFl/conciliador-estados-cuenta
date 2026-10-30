@@ -13,7 +13,7 @@
   <header class="encabezado">
     <div>
       <h1>Conciliador de estados de cuenta</h1>
-      <p class="sub">Pega los dos estados de cuenta, presiona <strong>Conciliar</strong> y copia lo que falta en cada uno.</p>
+      <p class="sub">Captura o pega los dos estados de cuenta, presiona <strong>Conciliar</strong> y copia lo que falta en cada uno.</p>
     </div>
     <span id="chipGist" class="chip">Sin base de datos</span>
   </header>
@@ -66,8 +66,8 @@
       <div class="rejilla-3">
         <label>Columnas que se comparan
           <select id="cruce">
-            <option value="directo">Cargos ↔ Cargos y Abonos ↔ Abonos</option>
-            <option value="cruzado">Cargos ↔ Abonos (banco contra libros)</option>
+            <option value="directo">Directo: Cargos ↔ Cargos y Abonos ↔ Abonos</option>
+            <option value="cruzado">Cruzado: Cargos ↔ Abonos (banco contra contabilidad)</option>
           </select>
         </label>
         <label>Tolerancia para “posible coincidencia” ($)
@@ -77,21 +77,31 @@
           <input type="number" id="maxDias" min="0" step="1" placeholder="Sin límite">
         </label>
       </div>
+      <div class="explica-cruce">
+        <p><strong>Directo</strong>: los dos documentos registran igual. Ejemplo: banco contra banco, o banco contra
+          una hoja donde las salidas también son cargos. Un pago de $30 es <em>cargo</em> en los dos.</p>
+        <p><strong>Cruzado</strong>: banco contra contabilidad (auxiliar de Bancos). La contabilidad registra al espejo:
+          un depósito es <em>abono</em> en el banco y <em>cargo</em> en libros; un pago es <em>cargo</em> en el banco y <em>abono</em> en libros.</p>
+        <p class="nota">¿Cuál uso? Busca un depósito de cliente en los dos: si está en la misma columna es directo; si está en la contraria, cruzado.
+          La app también te avisa si el otro modo concilia mucho más.</p>
+      </div>
       <p class="nota">Siempre se concilia por <strong>monto exacto al centavo</strong>. Si un monto se repite,
         se empareja primero con la misma fecha y luego con la más cercana; cada movimiento se usa una sola vez.
         Las diferencias de centavos nunca se concilian solas: se marcan como posible coincidencia para revisarlas.</p>
     </details>
 
     <!-- Captura -->
+    <p class="ayuda-captura">Escribe los movimientos directo en las tablas o copia desde Excel y pega (<kbd>Ctrl</kbd>+<kbd>V</kbd>) en cualquier celda.
+      <kbd>Enter</kbd> baja a la siguiente fila.</p>
     <section class="rejilla-2 captura">
       <div class="tarjeta" data-lado="A">
         <div class="titulo-lado">
           <span class="insignia">A</span>
           <input type="text" class="nombre-lado" id="nombreA" value="Banco" aria-label="Nombre del estado de cuenta A">
         </div>
-        <textarea id="textoA" spellcheck="false"
-          placeholder="Pega aquí desde Excel: Fecha · Concepto · Cargos · Abonos"></textarea>
+        <div class="captura-desliza" id="tablaA"></div>
         <div class="acciones">
+          <button type="button" class="secundario" data-agregar="A">+ Agregar fila</button>
           <label class="boton secundario">Importar CSV<input type="file" id="archivoA" accept=".csv,.tsv,.txt" hidden></label>
           <button type="button" class="secundario" data-limpiar="A">Limpiar</button>
         </div>
@@ -104,9 +114,9 @@
           <span class="insignia">B</span>
           <input type="text" class="nombre-lado" id="nombreB" value="Contabilidad" aria-label="Nombre del estado de cuenta B">
         </div>
-        <textarea id="textoB" spellcheck="false"
-          placeholder="Pega aquí desde Excel: Fecha · Concepto · Cargos · Abonos"></textarea>
+        <div class="captura-desliza" id="tablaB"></div>
         <div class="acciones">
+          <button type="button" class="secundario" data-agregar="B">+ Agregar fila</button>
           <label class="boton secundario">Importar CSV<input type="file" id="archivoB" accept=".csv,.tsv,.txt" hidden></label>
           <button type="button" class="secundario" data-limpiar="B">Limpiar</button>
         </div>
@@ -128,6 +138,7 @@
           <button type="button" id="btnExportar" class="secundario">Descargar resultado (CSV)</button>
         </div>
         <div id="estadoCuadre" class="estado-cuadre"></div>
+        <div id="sugerenciaCruce" class="sugerencia" hidden></div>
         <div class="tabla-desliza"><table id="tablaResumen" class="tabla"></table></div>
       </div>
       <div id="cuadros"></div>

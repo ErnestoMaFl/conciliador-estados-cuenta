@@ -1,6 +1,7 @@
 // Interfaz: captura, conciliación, resultados y sincronización con el Gist.
 
-import { leerMovimientos, movimientosAFilas } from './entrada.js';
+import { leerFilas, textoAFilas, movimientosAFilas } from './entrada.js';
+import { TablaCaptura } from './captura.js';
 import { conciliar, CONFIG_INICIAL } from './conciliacion.js';
 import { cuadroTSV, cuadroHTML, resultadoCSV, describirPosible } from './salida.js';
 import { csvAObjetos, objetosACsv } from './csv.js';
@@ -14,10 +15,13 @@ const $ = (id) => document.getElementById(id);
 const LADOS = ['A', 'B'];
 const PLURAL = { cargo: 'Cargos', abono: 'Abonos' };
 
+const tablas = {};
+
 const estado = {
   datos: { A: null, B: null },
   resultado: null,
-  gist: null,        // { token, id, url, archivos }
+  sugerencia: null,  // { otro, actual, alterno } si el otro modo de comparación concilia más
+  gist: null,       // { token, id, url, archivos }
   periodos: [],      // filas de periodos.csv
 };
 
@@ -117,8 +121,9 @@ function configDeCsv(texto) {
 // ---------- captura (RF-01 a RF-04) ----------
 
 function analizar(lado) {
-  const r = leerMovimientos($(`texto${lado}`).value, lado);
+  const r = leerFilas(tablas[lado].obtenerFilas(), lado);
   estado.datos[lado] = r;
+  tablas[lado].marcarErrores(r.errores);
 
   const resumen = $(`resumen${lado}`);
   resumen.replaceChildren();
@@ -140,22 +145,21 @@ function analizar(lado) {
   return r;
 }
 
-let temporizadorAnalisis;
-function alCambiarTexto(lado) {
-  clearTimeout(temporizadorAnalisis);
-  temporizadorAnalisis = setTimeout(() => {
+const temporizadores = {};
+function alCambiarTabla(lado) {
+  clearTimeout(temporizadores[lado]);
+  temporizadores[lado] = setTimeout(() => {
     analizar(lado);
     if (estado.resultado) ejecutarConciliacion();
   }, 250);
 }
 
-function movimientosATexto(filasCsv) {
-  const limpio = (s) => String(s ?? '').replace(/[\t\r\n]+/g, ' ');
-  const lineas = filasCsv.map((f) => {
+/** Filas guardadas en el Gist (fecha ISO) → filas de la tabla de captura. */
+function filasDeCsv(filasCsv) {
+  return filasCsv.map((f) => {
     const dia = parsearFecha(f.fecha);
-    return [dia === null ? f.fecha : fechaTexto(dia), f.concepto, f.cargo, f.abono].map(limpio).join('\t');
+    return [dia === null ? f.fecha : fechaTexto(dia), f.concepto, f.cargo, f.abono];
   });
-  return ['Fecha\tConcepto\tCargos\tAbonos', ...lineas].join('\n');
 }
 
 // ---------- conciliación y resultados (RF-05 a RF-15) ----------
@@ -167,8 +171,48 @@ function ejecutarConciliacion() {
     avisar('No hay movimientos válidos que conciliar.');
     return;
   }
-  estado.resultado = conciliar(A.movimientos, B.movimientos, leerConfigUI());
+  const config = leerConfigUI();
+  estado.resultado = conciliar(A.movimientos, B.movimientos, config);
+  estado.sugerencia = sugerirCruce(A.movimientos, B.movimientos, config);
   pintarResultado();
+}
+
+const contarConciliados = (r) => r.columnas.reduce((s, c) => s + c.conciliados.length, 0);
+
+/**
+ * Si el otro modo de comparación concilia claramente más movimientos, probablemente
+ * se eligió el modo equivocado (por ejemplo, banco contra contabilidad en modo directo).
+ */
+function sugerirCruce(movsA, movsB, config) {
+  const otro = config.cruce === 'directo' ? 'cruzado' : 'directo';
+  const actual = contarConciliados(estado.resultado);
+  const alterno = contarConciliados(conciliar(movsA, movsB, { ...config, cruce: otro }));
+  return alterno >= 2 && alterno >= actual * 1.5 && alterno > actual ? { otro, actual, alterno } : null;
+}
+
+const NOMBRE_CRUCE = {
+  directo: 'Directo (Cargos ↔ Cargos)',
+  cruzado: 'Cruzado (Cargos ↔ Abonos)',
+};
+
+function pintarSugerencia() {
+  const caja = $('sugerenciaCruce');
+  const s = estado.sugerencia;
+  caja.hidden = !s;
+  if (!s) return;
+  const boton = el('button', { type: 'button', class: 'secundario' }, `Cambiar a ${NOMBRE_CRUCE[s.otro]}`);
+  boton.addEventListener('click', () => {
+    $('cruce').value = s.otro;
+    guardar('conciliador.config', JSON.stringify(leerConfigUI()));
+    ejecutarConciliacion();
+    avisar(`Modo cambiado a ${NOMBRE_CRUCE[s.otro]}.`);
+  });
+  const motivo = s.otro === 'cruzado'
+    ? 'Parece que un estado de cuenta está al espejo del otro (por ejemplo, banco contra contabilidad).'
+    : 'Parece que los dos estados de cuenta registran igual (por ejemplo, banco contra banco).';
+  caja.replaceChildren(
+    el('span', {}, `⚠ Con el modo ${NOMBRE_CRUCE[s.otro]} se conciliarían ${s.alterno} movimientos en lugar de ${s.actual}. ${motivo}`),
+    boton);
 }
 
 async function copiarCuadro(movimientos, boton) {
@@ -197,9 +241,14 @@ async function copiarCuadro(movimientos, boton) {
   avisar(`${movimientos.length} movimientos copiados. Pégalos en Excel o en un correo.`);
 }
 
-function tablaMovimientos(movimientos, posibles) {
+const MAX_FILAS_VISIBLES = 300;
+
+function tablaMovimientos(todos, posibles) {
+  // Se dibujan hasta MAX_FILAS_VISIBLES; el botón Copiar y el CSV llevan todos.
+  const movimientos = todos.slice(0, MAX_FILAS_VISIBLES);
+  const ocultos = todos.length - movimientos.length;
   const conPosibles = movimientos.some((m) => posibles.has(m.id));
-  const total = movimientos.reduce((s, m) => s + m.centavos, 0);
+  const total = todos.reduce((s, m) => s + m.centavos, 0);
   return el('div', { class: 'tabla-desliza' }, el('table', { class: 'tabla' },
     el('thead', {}, el('tr', {},
       el('th', {}, 'Fecha'), el('th', {}, 'Concepto'), el('th', { class: 'num' }, 'Monto'),
@@ -212,7 +261,8 @@ function tablaMovimientos(movimientos, posibles) {
         el('td', { class: 'num' }, montoMoneda(m.centavos)),
         el('td', { class: 'fila' }, String(m.fila)),
         conPosibles && el('td', { class: 'posible' }, p ? `⚠ ${describirPosible(p)}` : ''));
-    })),
+    }), ocultos > 0 && el('tr', {}, el('td', { colspan: conPosibles ? 5 : 4, class: 'vacio' },
+      `… y ${ocultos} movimientos más. “Copiar” y “Descargar resultado” los incluyen todos.`))),
     el('tfoot', {}, el('tr', {},
       el('td', {}, 'Total'), el('td', {}), el('td', { class: 'num' }, montoMoneda(total)),
       el('td', {}), conPosibles && el('td', {}))),
@@ -240,7 +290,15 @@ function tablaConciliados(col, n) {
     det.append(el('p', { class: 'vacio' }, 'Sin movimientos conciliados.'));
     return det;
   }
-  det.append(el('div', { class: 'tabla-desliza' }, el('table', { class: 'tabla' },
+  // La tabla se arma hasta que se abre: con miles de movimientos no vuelve lenta la página.
+  det.addEventListener('toggle', () => {
+    if (det.open && det.children.length === 1) det.append(cuerpoConciliados(col, n));
+  });
+  return det;
+}
+
+function cuerpoConciliados(col, n) {
+  return el('div', { class: 'tabla-desliza' }, el('table', { class: 'tabla' },
     el('thead', {}, el('tr', {},
       el('th', { class: 'num' }, 'Monto'),
       el('th', {}, `Fecha ${n.A}`), el('th', {}, `Concepto ${n.A}`), el('th', { class: 'fila' }, 'Fila'),
@@ -251,8 +309,7 @@ function tablaConciliados(col, n) {
       el('td', { class: 'fecha' }, fechaTexto(a.fecha)), el('td', {}, a.concepto), el('td', { class: 'fila' }, String(a.fila)),
       el('td', { class: 'fecha' }, fechaTexto(b.fecha)), el('td', {}, b.concepto), el('td', { class: 'fila' }, String(b.fila)),
       el('td', { class: 'num' }, String(dias))))),
-  )));
-  return det;
+  ));
 }
 
 function pintarResultado() {
@@ -292,6 +349,7 @@ function pintarResultado() {
         cuadroPendientes(`No está en ${n.A} · ${PLURAL[c.tipoB].toLowerCase()} de ${n.B}`, c.pendientesB, c.posiblesB)));
   }));
 
+  pintarSugerencia();
   $('conciliados').replaceChildren(...columnas.map((c) => tablaConciliados(c, n)));
   $('resultados').hidden = false;
 }
@@ -467,8 +525,8 @@ async function abrirPeriodo() {
     $('nombrePeriodo').value = p.nombre || clave;
     $('nombreA').value = p.nombre_a || 'A';
     $('nombreB').value = p.nombre_b || 'B';
-    $('textoA').value = movimientosATexto(csvAObjetos(textoA));
-    $('textoB').value = movimientosATexto(csvAObjetos(textoB));
+    tablas.A.ponerFilas(filasDeCsv(csvAObjetos(textoA)));
+    tablas.B.ponerFilas(filasDeCsv(csvAObjetos(textoB)));
     ejecutarConciliacion();
     mensajeGist(`Periodo “${p.nombre || clave}” abierto.`, 'ok');
   } catch (e) {
@@ -530,7 +588,13 @@ function iniciar() {
   }
 
   for (const lado of LADOS) {
-    $(`texto${lado}`).addEventListener('input', () => alCambiarTexto(lado));
+    tablas[lado] = new TablaCaptura($(`tabla${lado}`), {
+      etiqueta: `Estado de cuenta ${lado}`,
+      alCambiar: () => alCambiarTabla(lado),
+    });
+  }
+
+  for (const lado of LADOS) {
     $(`nombre${lado}`).addEventListener('change', (e) => {
       guardar(`conciliador.nombre${lado}`, e.target.value);
       if (estado.resultado) pintarResultado();
@@ -538,17 +602,20 @@ function iniciar() {
     $(`archivo${lado}`).addEventListener('change', async (e) => {
       const archivo = e.target.files[0];
       if (!archivo) return;
-      $(`texto${lado}`).value = await archivo.text();
+      const { filas } = textoAFilas(await archivo.text());
       e.target.value = '';
-      analizar(lado);
-      if (estado.resultado) ejecutarConciliacion();
+      if (!tablas[lado].vacia && !confirm(`¿Reemplazar los movimientos de ${nombres()[lado]} con los del archivo?`)) return;
+      tablas[lado].ponerFilas(filas);
+      avisar(`${filas.length} filas importadas.`);
     });
   }
   document.querySelectorAll('[data-limpiar]').forEach((b) => b.addEventListener('click', () => {
     const lado = b.dataset.limpiar;
-    $(`texto${lado}`).value = '';
-    analizar(lado);
-    if (estado.resultado) ejecutarConciliacion();
+    if (tablas[lado].vacia || !confirm(`¿Borrar todos los movimientos de ${nombres()[lado]}?`)) return;
+    tablas[lado].ponerFilas([]);
+  }));
+  document.querySelectorAll('[data-agregar]').forEach((b) => b.addEventListener('click', () => {
+    tablas[b.dataset.agregar].agregarFila();
   }));
 
   for (const id of ['cruce', 'tolerancia', 'maxDias']) {
@@ -563,8 +630,8 @@ function iniciar() {
     if (estado.resultado) $('resultados').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   $('btnEjemplo').addEventListener('click', () => {
-    $('textoA').value = EJEMPLO_A;
-    $('textoB').value = EJEMPLO_B;
+    tablas.A.ponerFilas(textoAFilas(EJEMPLO_A).filas);
+    tablas.B.ponerFilas(textoAFilas(EJEMPLO_B).filas);
     ejecutarConciliacion();
   });
   $('btnExportar').addEventListener('click', descargarCSV);

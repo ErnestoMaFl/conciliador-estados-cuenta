@@ -6,9 +6,12 @@ Es HTML, CSS y JavaScript sin dependencias ni compilación. Todo el cálculo ocu
 
 ## Cómo se usa
 
-1. Copia de Excel las columnas **Fecha · Concepto · Cargos · Abonos** de cada estado de cuenta y pégalas en A y en B. También puedes importar un CSV.
-   - Si traes encabezado, se reconocen nombres como *Retiros/Depósitos*, *Descripción* o *Fecha de operación*, y se ignoran columnas extra como *Saldo*.
-   - Fechas: `dd/mm/aaaa`, `dd/mm/aa`, `aaaa-mm-dd` o `01/OCT/2026`. Montos: `$1,234.50`, `1234.5`, `-30.00` o `(30.00)`.
+1. Llena las tablas A y B con **Fecha · Concepto · Cargo · Abono** de tres formas:
+   - **Escribiendo directo** en las celdas. <kbd>Enter</kbd> baja a la siguiente fila y siempre queda una fila vacía al final.
+   - **Pegando desde Excel**: copia el rango y pega (<kbd>Ctrl</kbd>+<kbd>V</kbd>) en cualquier celda. Si el rango trae encabezado, se reconocen nombres como *Retiros/Depósitos*, *Descripción* o *Fecha de operación*, y se ignoran columnas extra como *Saldo*.
+   - **Importando un CSV**.
+
+   Fechas: `dd/mm/aaaa`, `dd/mm/aa`, `aaaa-mm-dd` o `01/OCT/2026`. Montos: `$1,234.50`, `1234.5`, `-30.00` o `(30.00)`. Al salir de la celda se acomodan como `01/10/2026` y `1,234.50`. Las filas con error se marcan en rojo; pasa el mouse sobre ellas para ver el motivo.
 2. Presiona **Conciliar**.
 3. Usa **Copiar** en cada cuadro *"No está en …"* y pega en Excel o en un correo. Se pega como tabla con Fecha, Concepto y Monto.
 
@@ -20,8 +23,20 @@ Es HTML, CSS y JavaScript sin dependencias ni compilación. Todo el cálculo ocu
 | Montos repetidos | Primero se empareja con la **misma fecha** y después con la **más cercana**. |
 | Uno a uno | Cada movimiento se usa una sola vez: tres pagos de 30 contra dos dejan uno pendiente. |
 | Diferencias de centavos | Nunca se concilian solas; se marcan ⚠ *posible coincidencia* según la tolerancia configurada. |
-| Columnas | *Directo*: cargos↔cargos y abonos↔abonos. *Cruzado*: cargos↔abonos (banco contra libros). |
+| Columnas | *Directo* o *Cruzado* (ver abajo). |
 | Máximo de días | Opcional. Un mismo monto más alejado que ese límite queda pendiente y se sugiere. |
+
+### ¿Directo o cruzado?
+
+| Movimiento real | Banco | Contabilidad (auxiliar de Bancos) | Otro banco |
+|---|---|---|---|
+| Te depositan $5,000 | Abono | **Cargo** (Debe) | Abono |
+| Pagas $30 | Cargo | **Abono** (Haber) | Cargo |
+
+- **Directo** (cargos↔cargos, abonos↔abonos): los dos documentos registran igual. Ejemplo: banco contra banco.
+- **Cruzado** (cargos↔abonos): banco contra contabilidad, que registra la cuenta de Bancos al espejo.
+
+Prueba rápida: busca un depósito de cliente en los dos documentos. Si está en la misma columna, es directo; si está en la contraria, cruzado. Si el otro modo concilia claramente más movimientos, la app lo sugiere con un botón para cambiarlo.
 
 Los montos se manejan en centavos enteros, sin errores de punto flotante. Con los mismos datos el resultado es siempre el mismo.
 
@@ -79,7 +94,8 @@ npm test    # pruebas de la lógica con node:test (Node 18 o más reciente)
 |---|---|
 | `js/formato.js` | Fechas y montos (centavos enteros) |
 | `js/csv.js` | Lectura y escritura de CSV/TSV con comillas |
-| `js/entrada.js` | Texto pegado → movimientos validados |
+| `js/entrada.js` | Filas o texto pegado → movimientos validados |
+| `js/captura.js` | Tabla editable con desplazamiento virtual (solo dibuja las filas visibles) |
 | `js/conciliacion.js` | Motor de conciliación |
 | `js/salida.js` | Cuadros para copiar y CSV de resultado |
 | `js/gist.js` | API de GitHub Gists |

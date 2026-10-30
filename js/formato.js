@@ -100,6 +100,13 @@ export function montoMoneda(centavos) {
   return formatoMoneda.format(centavos / 100);
 }
 
+const formatoEditable = new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Centavos → "1,234.50" (celdas de la tabla de captura). */
+export function montoEditable(centavos) {
+  return formatoEditable.format(centavos / 100);
+}
+
 /** Centavos → "1234.50" (copiado a Excel y guardado en CSV, sin separador de miles). */
 export function montoPlano(centavos) {
   const signo = centavos < 0 ? '-' : '';

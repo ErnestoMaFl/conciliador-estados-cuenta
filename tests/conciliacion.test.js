@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { leerMovimientos } from '../js/entrada.js';
+import { leerMovimientos, leerFilas, textoAFilas } from '../js/entrada.js';
 import { conciliar } from '../js/conciliacion.js';
 import { cuadroTSV, resultadoCSV } from '../js/salida.js';
 import { csvAObjetos } from '../js/csv.js';
@@ -19,12 +19,33 @@ test('lectura con encabezado, validación y resumen (RF-01 a RF-04)', () => {
     ['04/10/2026', 'Sin monto', '', ''],
   ), 'A');
   assert.equal(r.movimientos.length, 2);
-  assert.deepEqual(r.errores.map((e) => e.fila), [4, 5, 6]);
+  // El número de fila no cuenta el encabezado: coincide con la fila de la tabla de captura.
+  assert.deepEqual(r.errores.map((e) => e.fila), [3, 4, 5]);
   assert.match(r.errores[0].mensaje, /fecha inválida/);
   assert.match(r.errores[1].mensaje, /a la vez/);
   assert.match(r.errores[2].mensaje, /no trae monto/);
   assert.deepEqual(r.resumen, { total: 2, cargos: 3000, abonos: 100000, numCargos: 1, numAbonos: 1 });
-  assert.equal(r.movimientos[0].id, 'A-2');
+  assert.equal(r.movimientos[0].id, 'A-1');
+});
+
+test('captura en tabla: filas vacías se ignoran pero conservan la numeración', () => {
+  const r = leerFilas([
+    ['01/10/2026', 'Pago', '30', ''],
+    ['', '', '', ''],
+    ['', 'Sin fecha', '10', ''],
+    ['03/10/2026', 'Depósito', '', '100'],
+  ], 'A');
+  assert.deepEqual(r.movimientos.map((m) => m.fila), [1, 4]);
+  assert.deepEqual(r.errores, [{ fila: 3, mensaje: 'falta la fecha' }]);
+});
+
+test('texto con encabezado se acomoda a las 4 columnas de captura', () => {
+  const { filas, conEncabezado } = textoAFilas(tsv(
+    ['Saldo', 'Fecha', 'Depósitos', 'Descripción', 'Retiros'],
+    ['970', '01/10/2026', '', 'Pago', '30.00'],
+  ));
+  assert.equal(conEncabezado, true);
+  assert.deepEqual(filas, [['01/10/2026', 'Pago', '30.00', '']]);
 });
 
 test('mapea columnas por encabezado e ignora columnas extra como Saldo', () => {

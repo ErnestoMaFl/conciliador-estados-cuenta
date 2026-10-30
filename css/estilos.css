@@ -122,7 +122,7 @@ details.tarjeta[open] > summary { margin-bottom: 12px; }
 label { display: flex; flex-direction: column; gap: 4px; font-size: .88rem; color: var(--tenue); }
 label.check { flex-direction: row; align-items: center; gap: 8px; margin-top: 10px; }
 
-input[type="text"], input[type="password"], input[type="number"], select, textarea {
+input[type="text"], input[type="password"], input[type="number"], select {
   font: inherit;
   color: var(--texto);
   background: var(--fondo);
@@ -131,18 +131,93 @@ input[type="text"], input[type="password"], input[type="number"], select, textar
   padding: 8px 10px;
   width: 100%;
 }
-input:focus, select:focus, textarea:focus, button:focus-visible, .boton:focus-within {
+input:focus, select:focus, button:focus-visible, .boton:focus-within {
   outline: 2px solid var(--acento);
   outline-offset: 1px;
 }
 
-textarea {
-  min-height: 220px;
-  resize: vertical;
-  font: 13px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  white-space: pre;
+/* Tabla de captura tipo hoja de cálculo */
+.captura-desliza {
+  max-height: 420px;
   overflow: auto;
+  overflow-anchor: none; /* evita saltos de scroll al redibujar las filas visibles */
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--fondo);
 }
+.captura-tabla { width: 100%; min-width: 540px; border-collapse: collapse; font-size: .88rem; table-layout: fixed; }
+.captura-tabla th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--tarjeta);
+  color: var(--tenue);
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--borde);
+}
+.captura-tabla th:nth-child(1) { width: 38px; text-align: right; }
+.captura-tabla th:nth-child(2) { width: 104px; }
+.captura-tabla th:nth-child(4), .captura-tabla th:nth-child(5) { width: 104px; text-align: right; }
+.captura-tabla th:nth-child(6) { width: 30px; }
+.captura-tabla td { padding: 0; border-bottom: 1px solid var(--borde); border-right: 1px solid var(--borde); }
+.captura-tabla td:last-child { border-right: none; }
+.captura-tabla input {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 6px;
+  height: 31px;
+  font-size: .88rem;
+}
+.captura-tabla input:focus { outline: 2px solid var(--acento); outline-offset: -2px; background: var(--tarjeta); }
+.captura-tabla input::placeholder { color: var(--borde); }
+.captura-tabla tr.espaciador td { padding: 0; border: 0; }
+.captura-tabla .c-monto input { text-align: right; font-variant-numeric: tabular-nums; }
+.captura-tabla .c-fecha input { font-variant-numeric: tabular-nums; }
+.captura-tabla .c-num { text-align: right; color: var(--tenue); font-size: .78rem; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.captura-tabla .c-borrar button {
+  background: none;
+  border: none;
+  color: var(--tenue);
+  padding: 4px 8px;
+  font-size: 1rem;
+  line-height: 1;
+  opacity: .5;
+}
+.captura-tabla tr:hover .c-borrar button, .captura-tabla .c-borrar button:focus-visible { opacity: 1; }
+.captura-tabla .c-borrar button:hover { color: var(--peligro); }
+.captura-tabla tr.con-error td { background: var(--peligro-suave); }
+.captura-tabla tr.con-error .c-num { color: var(--peligro); font-weight: 700; }
+
+.ayuda-captura { color: var(--tenue); font-size: .88rem; margin: 20px 0 -4px; }
+kbd {
+  font: .78rem ui-monospace, Menlo, Consolas, monospace;
+  border: 1px solid var(--borde);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  background: var(--tarjeta);
+}
+
+.explica-cruce { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--acento); background: var(--acento-suave); border-radius: 0 6px 6px 0; font-size: .88rem; }
+.explica-cruce p { margin: 0 0 6px; }
+.explica-cruce .nota { margin: 0; }
+
+.sugerencia {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--alerta);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: .9rem;
+}
+.sugerencia[hidden] { display: none; }
 
 .titulo-lado { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .insignia {
