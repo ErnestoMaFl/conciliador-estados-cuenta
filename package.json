@@ -1,0 +1,10 @@
+{
+  "name": "conciliador-estados-cuenta",
+  "private": true,
+  "type": "module",
+  "description": "Conciliación de dos estados de cuenta por monto y fecha, con GitHub Gist como base de datos CSV.",
+  "scripts": {
+    "test": "node --test tests/",
+    "start": "python3 -m http.server 8080"
+  }
+}

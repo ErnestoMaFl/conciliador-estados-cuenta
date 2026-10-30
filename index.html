@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Conciliador de estados de cuenta</title>
+  <meta name="description" content="Concilia dos estados de cuenta por monto exacto y fecha. Guarda los periodos en un GitHub Gist como CSV.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231f6f5c'/><path d='M8 16l5 5 11-11' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="css/estilos.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="encabezado">
+    <div>
+      <h1>Conciliador de estados de cuenta</h1>
+      <p class="sub">Pega los dos estados de cuenta, presiona <strong>Conciliar</strong> y copia lo que falta en cada uno.</p>
+    </div>
+    <span id="chipGist" class="chip">Sin base de datos</span>
+  </header>
+
+  <main>
+    <!-- Base de datos en Gist -->
+    <details class="tarjeta" id="panelGist">
+      <summary><h2>Base de datos (GitHub Gist)</h2></summary>
+      <div class="rejilla-2">
+        <label><span>Token de GitHub (permiso <em>Gists: lectura y escritura</em>)</span>
+          <input type="password" id="token" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+        </label>
+        <label>ID del Gist
+          <input type="text" id="gistId" autocomplete="off" spellcheck="false" placeholder="Vacío = crear uno nuevo">
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="recordarToken"> Recordar el token en este navegador</label>
+      <div class="acciones">
+        <button type="button" id="btnConectar">Conectar</button>
+        <button type="button" id="btnCrearGist" class="secundario">Crear Gist nuevo</button>
+        <button type="button" id="btnDesconectar" class="secundario">Olvidar token</button>
+        <a id="enlaceGist" target="_blank" rel="noopener" hidden>Abrir Gist ↗</a>
+      </div>
+      <p class="nota">El token solo se guarda en este navegador y se envía únicamente a <code>api.github.com</code>.
+        Un Gist secreto no aparece en búsquedas, pero <strong>cualquiera con el enlace puede verlo</strong>.</p>
+
+      <div id="panelPeriodos" hidden>
+        <hr>
+        <h3>Periodos guardados</h3>
+        <div class="rejilla-2">
+          <label>Abrir periodo
+            <select id="listaPeriodos"><option value="">— Selecciona —</option></select>
+          </label>
+          <label>Nombre del periodo para guardar
+            <input type="text" id="nombrePeriodo" placeholder="Ej. Octubre 2026 Banorte">
+          </label>
+        </div>
+        <div class="acciones">
+          <button type="button" id="btnCargarPeriodo" class="secundario">Abrir</button>
+          <button type="button" id="btnGuardarPeriodo">Guardar en Gist</button>
+          <button type="button" id="btnEliminarPeriodo" class="peligro">Eliminar periodo</button>
+        </div>
+      </div>
+      <p id="mensajeGist" class="mensaje" role="status"></p>
+    </details>
+
+    <!-- Reglas -->
+    <details class="tarjeta">
+      <summary><h2>Reglas de conciliación</h2></summary>
+      <div class="rejilla-3">
+        <label>Columnas que se comparan
+          <select id="cruce">
+            <option value="directo">Cargos ↔ Cargos y Abonos ↔ Abonos</option>
+            <option value="cruzado">Cargos ↔ Abonos (banco contra libros)</option>
+          </select>
+        </label>
+        <label>Tolerancia para “posible coincidencia” ($)
+          <input type="number" id="tolerancia" min="0" step="0.01" value="1.00">
+        </label>
+        <label>Máximo de días entre fechas (vacío = sin límite)
+          <input type="number" id="maxDias" min="0" step="1" placeholder="Sin límite">
+        </label>
+      </div>
+      <p class="nota">Siempre se concilia por <strong>monto exacto al centavo</strong>. Si un monto se repite,
+        se empareja primero con la misma fecha y luego con la más cercana; cada movimiento se usa una sola vez.
+        Las diferencias de centavos nunca se concilian solas: se marcan como posible coincidencia para revisarlas.</p>
+    </details>
+
+    <!-- Captura -->
+    <section class="rejilla-2 captura">
+      <div class="tarjeta" data-lado="A">
+        <div class="titulo-lado">
+          <span class="insignia">A</span>
+          <input type="text" class="nombre-lado" id="nombreA" value="Banco" aria-label="Nombre del estado de cuenta A">
+        </div>
+        <textarea id="textoA" spellcheck="false"
+          placeholder="Pega aquí desde Excel: Fecha · Concepto · Cargos · Abonos"></textarea>
+        <div class="acciones">
+          <label class="boton secundario">Importar CSV<input type="file" id="archivoA" accept=".csv,.tsv,.txt" hidden></label>
+          <button type="button" class="secundario" data-limpiar="A">Limpiar</button>
+        </div>
+        <div id="resumenA" class="resumen-lado"></div>
+        <ul id="erroresA" class="errores"></ul>
+      </div>
+
+      <div class="tarjeta" data-lado="B">
+        <div class="titulo-lado">
+          <span class="insignia">B</span>
+          <input type="text" class="nombre-lado" id="nombreB" value="Contabilidad" aria-label="Nombre del estado de cuenta B">
+        </div>
+        <textarea id="textoB" spellcheck="false"
+          placeholder="Pega aquí desde Excel: Fecha · Concepto · Cargos · Abonos"></textarea>
+        <div class="acciones">
+          <label class="boton secundario">Importar CSV<input type="file" id="archivoB" accept=".csv,.tsv,.txt" hidden></label>
+          <button type="button" class="secundario" data-limpiar="B">Limpiar</button>
+        </div>
+        <div id="resumenB" class="resumen-lado"></div>
+        <ul id="erroresB" class="errores"></ul>
+      </div>
+    </section>
+
+    <div class="barra-conciliar">
+      <button type="button" id="btnConciliar" class="principal">Conciliar</button>
+      <button type="button" id="btnEjemplo" class="enlace">Cargar datos de ejemplo</button>
+    </div>
+
+    <!-- Resultados -->
+    <section id="resultados" hidden>
+      <div class="tarjeta">
+        <div class="titulo-resultados">
+          <h2>Resumen</h2>
+          <button type="button" id="btnExportar" class="secundario">Descargar resultado (CSV)</button>
+        </div>
+        <div id="estadoCuadre" class="estado-cuadre"></div>
+        <div class="tabla-desliza"><table id="tablaResumen" class="tabla"></table></div>
+      </div>
+      <div id="cuadros"></div>
+      <div id="conciliados"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Perspective Global de México · Los datos se procesan en tu navegador.</p>
+  </footer>
+
+  <div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+</body>
+</html>
